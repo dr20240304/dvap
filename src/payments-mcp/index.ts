@@ -78,7 +78,7 @@ export function buildServer(ledger: LedgerClient, agent: AgentDto, dir: string =
       inputSchema: {
         invoiceId: z.string().min(1), payeeId: z.string().min(1), amount: z.string().regex(/^\d+$/),
         note: z.string().max(300).optional().describe('Short summary of the payment shown to the human approver'),
-        override: z.string().max(200).optional().describe('Emergency override reason: skips human approval for payments up to $1,000'),
+        override: z.string().max(200).optional().describe('Emergency override reason: skips the CFO approval and signature for payments up to $1,000'),
       },
     },
     guard('payments:create', async ({ invoiceId, payeeId, amount, note, override }: { invoiceId: string; payeeId: string; amount: string; note?: string; override?: string }) =>

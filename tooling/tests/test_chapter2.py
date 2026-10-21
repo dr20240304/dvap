@@ -34,7 +34,7 @@ class Chapter2(unittest.TestCase):
             shown = http("GET", s.urls["approval"] + "/api/pending")["payments"][0]
             self.assertEqual(shown["headline"], NOTE)
             self.assertNotIn("Globex", json.dumps([shown["headline"], shown["lines"]]))
-            http("POST", f"{s.urls['approval']}/api/payments/{shown['id']}/approve")  # the CFO clicks Approve
+            http("POST", f"{s.urls['approval']}/api/payments/{shown['id']}/sign")  # the CFO clicks Approve & sign
             self.assertEqual(s.balance("acct_globex"), 9_500_000_000)
 
     def test_hardened_chain_is_blocked_at_step_one(self):
@@ -51,7 +51,7 @@ class V29SessionBinding(unittest.TestCase):
     def blind_post(self, s) -> int:
         mcp = Mcp(s.urls["mcp"], s.keys()["agentToken"])
         _, pay = mcp.call("create_payment", invoiceId="INV-1001", payeeId="p_initech", amount="1200000000")
-        req = urllib.request.Request(f"{s.urls['approval']}/api/payments/{pay['id']}/approve", method="POST", data=b"",
+        req = urllib.request.Request(f"{s.urls['approval']}/api/payments/{pay['id']}/sign", method="POST", data=b"",
                                      headers={"Origin": "https://evil.example"})
         try:
             with urllib.request.urlopen(req, timeout=10) as r:

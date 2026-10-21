@@ -41,6 +41,6 @@ describe('ledger dashboard (read-only operator view)', () => {
 
   it('only reads: the dashboard has no write routes', async () => {
     expect((await fetch(`${t.urls.dashboard}/api/state`, { method: 'POST' })).status).toBe(404);
-    expect((await fetch(`${t.urls.dashboard}/api/payments/x/approve`, { method: 'POST' })).status).toBe(404);
+    expect((await fetch(`${t.urls.dashboard}/api/payments/x/sign`, { method: 'POST' })).status).toBe(404);
   });
 });

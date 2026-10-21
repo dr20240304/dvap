@@ -1,5 +1,5 @@
 import { HttpError } from '../common/errors';
-import { randomHex, sha256Hex, timingSafeEqualStr } from '../common/crypto';
+import { canonicalJson, randomHex, sha256Hex, verifyMessage } from '../common/crypto';
 import { FEE_ACCOUNT, GAS_FEE, OVERRIDE_CEILING, SPONSOR_ACCOUNT, X402_DAILY_CAP } from '../common/config';
 import { hardened } from '../common/harden';
 import { parseMicros } from '../common/money';
@@ -122,10 +122,34 @@ export class LedgerService {
     return this.getAgent(r.id as string);
   }
 
-  approverByToken(token: string) {
-    const r = this.one('SELECT id, name, token_hash FROM approvers WHERE token_hash = ?', sha256Hex(token));
-    if (!r || !timingSafeEqualStr(r.token_hash as string, sha256Hex(token))) throw new HttpError(401, 'invalid_approver_token');
-    return { id: r.id as string, name: r.name as string };
+  private signer(id: string) {
+    const r = this.one('SELECT id, name, public_key FROM approvers WHERE id = ?', id);
+    if (!r) throw new HttpError(404, 'unknown_signer');
+    return { id: r.id as string, name: r.name as string, publicKey: r.public_key as string };
+  }
+
+  /**
+   * The transaction a signer signs for a payment: what the ledger will execute (from, to, asset, amount, invoice, payment id).
+   * `message` is the exact byte string that is signed; `digest` is its hash, the "transaction hash" a signing screen can show.
+   */
+  paymentTransaction(id: string) {
+    const p = this.one('SELECT * FROM payments WHERE id = ?', id);
+    if (!p) throw new HttpError(404, 'payment_not_found');
+    const agent = this.getAgent(p.requested_by as string);
+    const payee = this.one('SELECT account_id FROM payees WHERE id = ?', p.payee_id as string)!;
+    const txn = {
+      chain: 'dvap:local', type: 'transfer', asset: 'USDC',
+      from: agent.operatingAccount, to: payee.account_id as string, amount: String(p.amount), invoice: p.invoice_id as string, payment: id,
+    };
+    const message = canonicalJson(txn);
+    return { tx: txn, message, digest: '0x' + sha256Hex(message) };
+  }
+
+  /** A signer's signature over `message`, checked against the public key the ledger holds for that signer. */
+  private checkSignature(signerId: string, message: string, signature: string) {
+    const signer = this.signer(signerId);
+    if (!verifyMessage(signer.publicKey, message, signature)) throw new HttpError(403, 'bad_signature');
+    return signer;
   }
 
   private payeeName(id: string): string {
@@ -291,28 +315,31 @@ export class LedgerService {
     this.audit(actor, 'payment.settled', { id: paymentId, invoiceId: p.invoice_id, amount, transfer: txId });
   }
 
-  approvePayment(id: string, approverToken: string) {
-    const approver = this.approverByToken(approverToken);
+  /** The CFO's signature over the payment's transaction releases it: the ledger executes the transfer once a valid signature is present. */
+  signPayment(id: string, signerId: string, signature: string) {
     return tx(this.db, () => {
       const p = this.one('SELECT * FROM payments WHERE id = ?', id);
       if (!p) throw new HttpError(404, 'payment_not_found');
       if (p.status !== 'pending_approval') throw new HttpError(409, 'not_pending_approval');
+      const { message, digest } = this.paymentTransaction(id);
+      const approver = this.checkSignature(signerId, message, signature);
       if (p.requested_by === approver.id) throw new HttpError(403, 'self_approval_forbidden');
       const inv = this.one('SELECT status FROM invoices WHERE id = ?', p.invoice_id as string)!;
       if (inv.status !== 'open') throw new HttpError(409, 'invoice_not_open');
       this.run(`UPDATE payments SET approved_by=?, updated_at=? WHERE id=?`, approver.id, this.ts(), id);
-      this.audit(approver.id, 'payment.approved', { id });
+      this.audit(approver.id, 'payment.approved', { id, digest, signed: true });
       this.settle(id, approver.id);
       return this.getPayment(id);
     });
   }
 
-  rejectPayment(id: string, approverToken: string, reason?: string) {
-    const approver = this.approverByToken(approverToken);
+  /** A rejection is also signed: the signer signs `{"action":"reject","payment":<id>}`. */
+  rejectPayment(id: string, signerId: string, signature: string, reason?: string) {
     return tx(this.db, () => {
       const p = this.one('SELECT * FROM payments WHERE id = ?', id);
       if (!p) throw new HttpError(404, 'payment_not_found');
       if (p.status !== 'pending_approval') throw new HttpError(409, 'not_pending_approval');
+      const approver = this.checkSignature(signerId, canonicalJson({ action: 'reject', payment: id }), signature);
       this.run(`UPDATE payments SET status='rejected', approved_by=?, reason=?, updated_at=? WHERE id=?`, approver.id, reason ?? 'rejected_by_approver', this.ts(), id);
       this.audit(approver.id, 'payment.rejected', { id, reason });
       return this.getPayment(id);

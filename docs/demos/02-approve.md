@@ -24,7 +24,7 @@ What you should see from the script:
 [2/3] V5  widen policy -> allowed payees now ['p_initech', 'p_hooli', 'p_globex']
 [3/3] V8  create_payment -> pending_approval pay_…
 ```
-Open http://127.0.0.1:4200: the CFO sees only the Initech note. Click **Approve**, then `make d-status`: Globex +$9,500.
+Open http://127.0.0.1:4200: the CFO sees only the Initech note. Click **Approve & sign**, then `make d-status`: Globex +$9,500.
 
 ## Run it (local)
 ```bash

@@ -40,7 +40,7 @@ describe('PayPilot end-to-end', () => {
     // The UI page and its API are served and render the ledger's own record of the payment.
     const page = await fetch(t.urls.approval);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain('CFO approvals');
+    expect(await page.text()).toContain('CFO approve and sign');
     const pending = (await (await fetch(`${t.urls.approval}/api/pending`)).json()) as { payments: { id: string; payeeName: string; amount: string }[] };
     expect(pending.payments[0]).toMatchObject({ id, payeeName: 'Initech Systems', amount: String(dollars(1200)) });
     expect(await bal(t, 'acct_initech')).toBe(0); // nothing moved before approval

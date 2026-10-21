@@ -40,8 +40,8 @@ export async function withStack(): Promise<TestStack> {
 
 export const bal = async (t: TestStack, id: string) => Number((await t.client.getAccount(id)).balance);
 
-/** The CFO clicking Approve/Reject in the approval page: same-origin, with the session cookie and token the page fetches first. */
-export async function cfoClick(approvalUrl: string, id: string, verb: 'approve' | 'reject' = 'approve'): Promise<Response> {
+/** The CFO clicking Approve & sign (or Reject) in the signing page: same-origin, with the session cookie and token the page fetches first. */
+export async function cfoClick(approvalUrl: string, id: string, verb: 'sign' | 'reject' = 'sign'): Promise<Response> {
   const s = await fetch(`${approvalUrl}/api/session`);
   const cookie = (s.headers.get('set-cookie') ?? '').split(';')[0]!;
   const { csrf } = await s.json();

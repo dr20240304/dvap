@@ -33,8 +33,9 @@ export interface Keys {
   agentToken: string;
   /** low-privilege credential issued to suppliers for their invoice-status portal assistant */
   portalToken: string;
-  /** CFO credential held by the approval UI only */
-  cfoToken: string;
+  /** the CFO's signing key (ed25519, PKCS8 base64): held by the CFO signing UI only. The ledger knows only the public half */
+  cfoPrivateKey: string;
+  cfoPublicKey: string;
 }
 
 export function loadKeys(dir: string = dataDir()): Keys {

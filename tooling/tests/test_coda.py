@@ -26,7 +26,7 @@ class Coda(unittest.TestCase):
         return subprocess.run([sys.executable, str(TOOLING / "exploits/coda_pwn.py"), s.urls["mcp"], s.urls["ledger"], s.info["portalToken"], s.data_dir, pid],
                               capture_output=True, text=True, timeout=30)
 
-    def test_default_leaks_secrets_and_self_approves(self):
+    def test_default_leaks_secrets_and_self_signs(self):
         with stack("") as s:
             out = self.run_exploit(s, self.pending_payment(s))
             self.assertEqual(out.returncode, 0, out.stdout + out.stderr)

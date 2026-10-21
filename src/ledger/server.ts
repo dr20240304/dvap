@@ -41,7 +41,6 @@ export function createLedgerApp(ledger: LedgerService, serviceKey: string): Expr
 
   const tokenBody = z.object({ token: z.string().min(1) });
   app.post('/auth/agent', wrap((req) => ledger.agentByToken(tokenBody.parse(req.body).token)));
-  app.post('/auth/approver', wrap((req) => ledger.approverByToken(tokenBody.parse(req.body).token)));
 
   const policyBody = z.object({
     actor: z.string(), perTxCap: z.string().optional(), dailyCap: z.string().optional(),
@@ -66,11 +65,15 @@ export function createLedgerApp(ledger: LedgerService, serviceKey: string): Expr
   app.get('/payments', wrap((req) => ({ payments: ledger.listPayments(typeof req.query.status === 'string' ? req.query.status : undefined) })));
   app.get('/payments/:id', wrap((req) => ledger.getPayment(String(req.params.id))));
 
-  const approveBody = z.object({ approverToken: z.string().min(1), reason: z.string().max(500).optional() });
-  app.post('/payments/:id/approve', wrap((req) => ledger.approvePayment(String(req.params.id), approveBody.parse(req.body).approverToken)));
+  app.get('/payments/:id/transaction', wrap((req) => ledger.paymentTransaction(String(req.params.id))));
+  const signBody = z.object({ signer: z.string().min(1), signature: z.string().min(1), reason: z.string().max(500).optional() });
+  app.post('/payments/:id/sign', wrap((req) => {
+    const b = signBody.parse(req.body);
+    return ledger.signPayment(String(req.params.id), b.signer, b.signature);
+  }));
   app.post('/payments/:id/reject', wrap((req) => {
-    const b = approveBody.parse(req.body);
-    return ledger.rejectPayment(String(req.params.id), b.approverToken, b.reason);
+    const b = signBody.parse(req.body);
+    return ledger.rejectPayment(String(req.params.id), b.signer, b.signature, b.reason);
   }));
 
   const transferBody = z.object({ from: z.string(), to: z.string(), amount: z.string(), nonce: z.string().min(8).max(128), memo: z.string().max(200), payFee: z.boolean().optional() });

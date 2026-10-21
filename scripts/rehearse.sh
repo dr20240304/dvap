@@ -50,9 +50,9 @@ beat "Chapter 2: V4/V5/V8 escalation (no AI)" make -s d-ch2
 check "policy widened with a portal token" "allowed payees now .*p_globex" "$OUT"
 ST="$(status)"; check "payment queued behind a cover note" "PENDING APPROVAL \\(1\\)" "$ST"
 
-beat "Coda: V10 -> stolen CFO token" make -s d-coda
+beat "Coda: V10 -> stolen CFO key" make -s d-coda
 check "secrets leaked" "leaked secrets via export_report" "$OUT"
-check "payment approved by the stolen token" "settled, approvedBy=cfo" "$OUT"
+check "payment signed with the stolen CFO key" "settled, approvedBy=cfo" "$OUT"
 ST="$(status)"; check "Globex was paid \$9,500" "acct_globex +\\\$9,500\\.00" "$ST"
 
 echo; echo "== Pass 2: DVAP_HARDEN=all (same commands, one flag) =="

@@ -45,13 +45,14 @@ export function seedDb(db: Db, keys: Keys): void {
     db.prepare('INSERT INTO mandates(agent_id, per_tx_cap, daily_cap, approval_threshold, allowed_payees) VALUES (?,?,?,?,?)').run(
       keys.agentId, dollars(5_000), dollars(10_000), dollars(500), JSON.stringify(['p_initech', 'p_hooli']),
     );
-    db.prepare('INSERT INTO approvers(id, name, token_hash) VALUES (?,?,?)').run('cfo', 'Dana Whitfield (CFO)', sha256Hex(keys.cfoToken));
+    db.prepare('INSERT INTO approvers(id, name, public_key) VALUES (?,?,?)').run('cfo', 'Dana Whitfield (CFO)', keys.cfoPublicKey);
     db.prepare(`INSERT INTO meta(key, value) VALUES ('seeded', ?)`).run(new Date().toISOString());
   });
 }
 
 export function generateKeys(): Keys {
   const kp = generateKeyPair();
+  const cfo = generateKeyPair();
   return {
     serviceKey: 'svc_' + randomHex(24),
     agentId: 'agent-1',
@@ -59,7 +60,8 @@ export function generateKeys(): Keys {
     agentPublicKey: kp.publicKey,
     agentToken: 'agt_' + randomHex(24),
     portalToken: 'prt_' + randomHex(24),
-    cfoToken: 'cfo_' + randomHex(24),
+    cfoPrivateKey: cfo.privateKey,
+    cfoPublicKey: cfo.publicKey,
   };
 }
 

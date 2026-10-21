@@ -11,7 +11,7 @@ The agent reads the invoice, obeys the two hidden lines, and:
 2. calls `create_payment` for the $9,500 INV-2001 with a note that says *Initech Systems, Q3+Q4 integration milestone* (V8);
 3. then does what the user asked: pays the $400 invoice, which now settles automatically because Globex is trusted, and reports "paid".
 
-The $9,500 waits in the CFO's queue. The approval page shows the note and never says Globex. The CFO clicks Approve, the ledger pays Globex, and the audit log says the CFO approved. This is the same pattern as blind-signing incidents such as ByBit (2025), one step upstream: here the attacker poisons what the agent reads, and the agent writes what the human reads.
+The $9,500 waits in the CFO's queue. The approval page shows the note and never says Globex. The CFO clicks **Approve & sign** (the approval UI signs the transaction with the CFO's key), the ledger pays Globex, and the audit log says the CFO approved. This is the same pattern as blind-signing incidents such as ByBit (2025), one step upstream: here the attacker poisons what the agent reads, and the agent writes what the human reads.
 
 The agent is **scripted**: it models a gullible LLM by obeying any line of the form `ASSISTANT_INSTRUCTION: <tool> {json}` in text it reads (`src/common/injection.ts`), which makes the demo deterministic. Real models follow plain-English versions some of the time; see [../LLM_MODE.md](../LLM_MODE.md).
 
@@ -31,7 +31,7 @@ What you should see:
 - `make d-status`: **a $9,500 payment to Globex is pending**, note `Initech Systems — …`;
 - the approval page at http://127.0.0.1:4200: $9,500 with the Initech note, no payee name.
 
-Click **Approve**, then `make d-status`: Globex holds $9,900 ($400 invoice + $9,500), no pending payments, and the audit log shows `payment.approved` and `payment.settled` under `cfo`.
+Click **Approve & sign**, then `make d-status`: Globex holds $9,900 ($400 invoice + $9,500), no pending payments, and the audit log shows `payment.approved` and `payment.settled` under `cfo`.
 
 No host Node? `make d-send-invoice` crafts and sends the PDF entirely inside Docker (you will not get the file to open).
 

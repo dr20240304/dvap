@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS mandates(
   per_tx_cap INTEGER NOT NULL, daily_cap INTEGER NOT NULL,
   approval_threshold INTEGER NOT NULL, allowed_payees TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS approvers(
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL);
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, public_key TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS payments(
   id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL REFERENCES invoices(id),
   payee_id TEXT NOT NULL, amount INTEGER NOT NULL,

@@ -14,7 +14,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dvap-serve-'));
 const stack = await startStack({ dir, ephemeral: true });
 const rogue = await listen('rogue-merchant', createRogueMerchantApp({ facilitatorUrl: stack.urls.facilitator }), 0);
 
-console.log(JSON.stringify({ dir, urls: { ...stack.urls, rogue: rogue.url }, serviceKey: stack.keys.serviceKey, cfoToken: stack.keys.cfoToken, portalToken: stack.keys.portalToken }));
+console.log(JSON.stringify({ dir, urls: { ...stack.urls, rogue: rogue.url }, serviceKey: stack.keys.serviceKey, cfoPrivateKey: stack.keys.cfoPrivateKey, portalToken: stack.keys.portalToken }));
 const stop = () => void Promise.all([rogue.close(), stack.close()]).then(() => { fs.rmSync(dir, { recursive: true, force: true }); process.exit(0); });
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

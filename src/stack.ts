@@ -40,7 +40,7 @@ export async function startStack(opts: { dir?: string; ephemeral?: boolean; rese
   running.push(mcp);
   const approval = await listen(
     'approval-ui',
-    createApprovalUiApp({ ledgerUrl: ledger.url, serviceKey: keys.serviceKey, cfoToken: keys.cfoToken }),
+    createApprovalUiApp({ ledgerUrl: ledger.url, serviceKey: keys.serviceKey, cfoPrivateKey: keys.cfoPrivateKey }),
     p('approval'),
   );
   running.push(approval);

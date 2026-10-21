@@ -1,6 +1,6 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { randomHex, sha256Hex, timingSafeEqualStr } from '../common/crypto';
+import { canonicalJson, randomHex, sha256Hex, signMessage, timingSafeEqualStr } from '../common/crypto';
 import { hostGuard } from '../common/hostGuard';
 import { errorHandler, HttpError } from '../common/errors';
 import { hardened } from '../common/harden';
@@ -10,12 +10,12 @@ import { usd } from '../common/money';
 export interface ApprovalUiConfig {
   ledgerUrl: string;
   serviceKey: string;
-  cfoToken: string; // held by this service only; the agent never sees it
+  cfoPrivateKey: string; // the CFO's signing key (ed25519): held by this service only, like a wallet; the agent never sees it
 }
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PayPilot — CFO approvals</title>
+<title>PayPilot — CFO approve and sign</title>
 <style>
   :root{--bg:#0f1420;--card:#171e2e;--fg:#e8ecf4;--mut:#93a0b8;--ok:#3ecf8e;--bad:#ff6b6b;--warn:#ffb454;--line:#263048}
   @media (prefers-color-scheme: light){:root{--bg:#f4f6fb;--card:#fff;--fg:#141a29;--mut:#5b6780;--line:#dfe4ef}}
@@ -27,13 +27,14 @@ const PAGE = `<!doctype html>
   .row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .amt{font-size:22px;font-weight:700}
   .mut{color:var(--mut);font-size:13px}
+  .tx{font:12px ui-monospace,Menlo,monospace;color:var(--mut);margin-top:6px;word-break:break-all}
   button{border:0;border-radius:8px;padding:8px 16px;font-weight:600;cursor:pointer;margin-right:8px}
   .ok{background:var(--ok);color:#052} .no{background:var(--bad);color:#300}
   .empty{color:var(--mut);text-align:center;padding:32px}
 </style></head>
 <body>
 <div class="banner">DVAP — intentionally vulnerable demo. Fictional money.</div>
-<header><strong>PayPilot · CFO approvals</strong><span class="mut" id="who">Dana Whitfield (CFO)</span></header>
+<header><strong>PayPilot · CFO approve and sign</strong><span class="mut" id="who">Dana Whitfield (CFO) · signing key held here</span></header>
 <main><div id="list"><div class="empty">Loading…</div></div></main>
 <script>
 const list = document.getElementById('list');
@@ -48,15 +49,16 @@ async function act(id, verb){
 async function load(){
   const r = await fetch('/api/pending'); const data = await r.json();
   list.replaceChildren();
-  if(!data.payments.length){list.append(el('div',{className:'empty'},'No payments waiting for approval.'));return}
+  if(!data.payments.length){list.append(el('div',{className:'empty'},'No payments waiting for your approval and signature.'));return}
   for(const p of data.payments){
     const card = el('div',{className:'card'},
       el('div',{className:'row'}, el('div',{className:'amt'},usd(p.amount)), el('div',{className:'mut'},p.id)),
       el('div',{}, el('strong',{},p.headline)),
       ...p.lines.map((l)=>el('div',{className:'mut'},l)),
       el('div',{className:'mut'},'Requested by '+p.requestedBy+' · policy: '+(p.reason||'—')+' · '+p.createdAt),
+      el('div',{className:'tx'},'You are signing transaction '+p.digest),
       el('div',{style:'margin-top:12px'},
-        el('button',{className:'ok',onclick:()=>act(p.id,'approve')},'Approve'),
+        el('button',{className:'ok',onclick:()=>act(p.id,'sign')},'Approve & sign'),
         el('button',{className:'no',onclick:()=>act(p.id,'reject')},'Reject')));
     list.append(card);
   }
@@ -69,7 +71,7 @@ load(); setInterval(load, 2000);
  * never from text supplied by the agent. All values are inserted with textContent, not HTML.
  */
 /**
- * What the CFO reads before approving.
+ * What the CFO reads before approving and signing.
  * V8: VULNERABLE BY DEFAULT — the headline is the agent's own summary ("note"); the payee the ledger will actually pay is not shown.
  * DVAP_HARDEN=V8: the headline is built only from the ledger's record (payee, account, verification, amount); the agent's note
  * is shown last, labelled untrusted.
@@ -80,7 +82,7 @@ export function describePayment(p: PaymentDto, payee: { accountId: string; verif
   const acct = payee ? `${payee.accountId}${payee.verified ? '' : ' — UNVERIFIED PAYEE'}` : 'unknown account';
   return {
     headline: `PAY ${usd(Number(p.amount))} TO ${p.payeeName.toUpperCase()} (${acct})`,
-    lines: [base, ...(p.note ? [`Agent's note (unverified text): ${p.note}`] : [])],
+    lines: [base, `Transfer: ${usd(Number(p.amount))} USDC from the operating account to ${payee?.accountId ?? 'unknown account'}`, ...(p.note ? [`Agent's note (unverified text): ${p.note}`] : [])],
   };
 }
 
@@ -96,8 +98,8 @@ export function createApprovalUiApp(cfg: ApprovalUiConfig): Express {
 
   app.get('/api/pending', (_req, res, next) => {
     Promise.all([ledger.listPayments('pending_approval'), ledger.listPayees()])
-      .then(([r, payees]) => res.json({
-        payments: r.payments.map((p) => ({ ...p, ...describePayment(p, payees.payees.find((x) => x.id === p.payeeId)) })),
+      .then(async ([r, payees]) => res.json({
+        payments: await Promise.all(r.payments.map(async (p) => ({ ...p, digest: (await ledger.paymentTransaction(p.id)).digest, ...describePayment(p, payees.payees.find((x) => x.id === p.payeeId)) }))),
       }), next);
   });
 
@@ -128,11 +130,16 @@ export function createApprovalUiApp(cfg: ApprovalUiConfig): Express {
   };
 
   const idParam = z.string().regex(/^pay_[0-9a-f]+$/);
-  app.post('/api/payments/:id/approve', bound, (req, res, next) => {
-    ledger.approvePayment(idParam.parse(req.params.id), cfg.cfoToken).then((p) => res.json(p), next);
+  /** The CFO's click signs the payment's transaction with the CFO's key (as a wallet would) and sends the signature to the ledger. */
+  app.post('/api/payments/:id/sign', bound, (req, res, next) => {
+    const id = idParam.parse(req.params.id);
+    ledger.paymentTransaction(id)
+      .then((t) => ledger.signPayment(id, 'cfo', signMessage(cfg.cfoPrivateKey, t.message)))
+      .then((p) => res.json(p), next);
   });
   app.post('/api/payments/:id/reject', bound, (req, res, next) => {
-    ledger.rejectPayment(idParam.parse(req.params.id), cfg.cfoToken, 'rejected by CFO').then((p) => res.json(p), next);
+    const id = idParam.parse(req.params.id);
+    ledger.rejectPayment(id, 'cfo', signMessage(cfg.cfoPrivateKey, canonicalJson({ action: 'reject', payment: id })), 'rejected by CFO').then((p) => res.json(p), next);
   });
 
   app.use(errorHandler);

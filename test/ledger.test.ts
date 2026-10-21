@@ -1,3 +1,4 @@
+import { signMessage } from '../src/common/crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dollars } from '../src/common/money';
 import { AGENT_WALLET_ACCOUNT, OPERATING_ACCOUNT } from '../src/common/config';
@@ -42,18 +43,22 @@ describe('payment policy in the ledger', () => {
     await expect(pay('INV-1002', 'p_hooli', dollars(300))).rejects.toMatchObject({ code: 'invoice_not_open' });
   });
 
-  it('holds a large payment for approval; agent cannot approve; CFO can; double-approve fails', async () => {
+  it('holds a large payment for approval and signature; only the CFO key can sign; double-sign fails', async () => {
     const p = await pay('INV-1001', 'p_initech', dollars(1200));
     expect(p.status).toBe('pending_approval');
     await expect(pay('INV-1001', 'p_initech', dollars(1200))).rejects.toMatchObject({ code: 'duplicate_payment' });
-    // the agent's bearer token is not an approver credential
-    await expect(t.client.approvePayment(p.id, t.keys.agentToken)).rejects.toMatchObject({ code: 'invalid_approver_token' });
+    const txn = await t.client.paymentTransaction(p.id);
+    expect(txn.tx).toMatchObject({ chain: 'dvap:local', to: 'acct_initech', amount: String(dollars(1200)), invoice: 'INV-1001' });
+    // a signature from any key but the CFO's is rejected
+    await expect(t.client.signPayment(p.id, 'cfo', signMessage(t.keys.agentPrivateKey, txn.message))).rejects.toMatchObject({ code: 'bad_signature' });
+    // so is a valid CFO signature over a different message
+    await expect(t.client.signPayment(p.id, 'cfo', signMessage(t.keys.cfoPrivateKey, txn.message + ' '))).rejects.toMatchObject({ code: 'bad_signature' });
     expect(await bal(t, 'acct_initech')).toBe(0);
-    const approved = await t.client.approvePayment(p.id, t.keys.cfoToken);
+    const approved = await t.client.signPayment(p.id, 'cfo', signMessage(t.keys.cfoPrivateKey, txn.message));
     expect(approved.status).toBe('settled');
     expect(approved.approvedBy).toBe('cfo');
     expect(await bal(t, 'acct_initech')).toBe(dollars(1200));
-    await expect(t.client.approvePayment(p.id, t.keys.cfoToken)).rejects.toMatchObject({ code: 'not_pending_approval' });
+    await expect(t.client.signPayment(p.id, 'cfo', signMessage(t.keys.cfoPrivateKey, txn.message))).rejects.toMatchObject({ code: 'not_pending_approval' });
   });
 
   it('audit log records every state change', async () => {

@@ -208,7 +208,7 @@ export async function runAgent(prompt: string, cfg: AgentConfig): Promise<AgentR
     say(`✅ Payment ${payment.id} → ${payment.status}${payment.reason ? ` (${payment.reason})` : ''}`);
 
     if (payment.status === 'pending_approval') {
-      say('⏳ Waiting for CFO approval…');
+      say('⏳ Waiting for the CFO to approve and sign…');
       const deadline = Date.now() + (cfg.approvalTimeoutMs ?? 60_000);
       while (payment.status === 'pending_approval' && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, cfg.pollMs ?? 500));

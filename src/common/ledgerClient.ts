@@ -54,7 +54,6 @@ export class LedgerClient {
 
   getAgent = (id: string) => this.call<AgentDto>('GET', `/agents/${encodeURIComponent(id)}`);
   authAgent = (token: string) => this.call<AgentDto>('POST', '/auth/agent', { token });
-  authApprover = (token: string) => this.call<{ id: string; name: string }>('POST', '/auth/approver', { token });
   listAccounts = () => this.call<{ accounts: { id: string; name: string; balance: string }[] }>('GET', '/accounts');
   getAccount = (id: string) => this.call<{ id: string; name: string; balance: string }>('GET', `/accounts/${encodeURIComponent(id)}`);
   listPayees = () => this.call<{ payees: { id: string; name: string; accountId: string; verified: boolean }[] }>('GET', '/payees');
@@ -70,9 +69,10 @@ export class LedgerClient {
   getPayment = (id: string) => this.call<PaymentDto>('GET', `/payments/${encodeURIComponent(id)}`);
   listPayments = (status?: string) =>
     this.call<{ payments: PaymentDto[] }>('GET', `/payments${status ? `?status=${encodeURIComponent(status)}` : ''}`);
-  approvePayment = (id: string, approverToken: string) => this.call<PaymentDto>('POST', `/payments/${encodeURIComponent(id)}/approve`, { approverToken });
-  rejectPayment = (id: string, approverToken: string, reason?: string) =>
-    this.call<PaymentDto>('POST', `/payments/${encodeURIComponent(id)}/reject`, { approverToken, reason });
+  paymentTransaction = (id: string) => this.call<{ tx: Record<string, string>; message: string; digest: string }>('GET', `/payments/${encodeURIComponent(id)}/transaction`);
+  signPayment = (id: string, signer: string, signature: string) => this.call<PaymentDto>('POST', `/payments/${encodeURIComponent(id)}/sign`, { signer, signature });
+  rejectPayment = (id: string, signer: string, signature: string, reason?: string) =>
+    this.call<PaymentDto>('POST', `/payments/${encodeURIComponent(id)}/reject`, { signer, signature, reason });
   transfer = (t: { from: string; to: string; amount: string; nonce: string; memo: string; payFee?: boolean }) =>
     this.call<{ transaction: string }>('POST', '/transfers', t);
   getTransfer = (id: string) => this.call<{ id: string; from: string; to: string; amount: string; kind: string; ref: string; memo: string }>('GET', `/transfers/${encodeURIComponent(id)}`);

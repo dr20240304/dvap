@@ -141,7 +141,7 @@ describe('V29 — approval action not bound to the approver\'s session', () => {
   const queue = async () => (await u.client.createPayment({ agentId: u.keys.agentId, invoiceId: 'INV-1001', payeeId: 'p_initech', amount: '1200000000' })).id;
   /** What a hostile web page in the CFO's browser (or an SSRF'd agent) can do: a blind cross-origin POST, no cookie, no token. */
   const blindPost = (id: string) =>
-    fetch(`${u.urls.approval}/api/payments/${id}/approve`, { method: 'POST', headers: { origin: 'https://evil.example' } });
+    fetch(`${u.urls.approval}/api/payments/${id}/sign`, { method: 'POST', headers: { origin: 'https://evil.example' } });
 
   it('default: a cross-origin POST with no credentials approves the payment (the bug)', async () => {
     const id = await queue();
@@ -158,7 +158,7 @@ describe('V29 — approval action not bound to the approver\'s session', () => {
     const s = await fetch(`${u.urls.approval}/api/session`);
     const cookie = s.headers.get('set-cookie')!.split(';')[0]!;
     const { csrf } = await s.json();
-    const ok = await fetch(`${u.urls.approval}/api/payments/${id}/approve`, { method: 'POST', headers: { cookie, 'x-csrf-token': csrf } });
+    const ok = await fetch(`${u.urls.approval}/api/payments/${id}/sign`, { method: 'POST', headers: { cookie, 'x-csrf-token': csrf } });
     expect(ok.status).toBe(200);
     expect((await u.client.getPayment(id)).status).toBe('settled');
   });
