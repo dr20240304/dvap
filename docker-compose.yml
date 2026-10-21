@@ -89,6 +89,14 @@ services:
     ports: [ "127.0.0.1:4200:4200" ]
     environment: { <<: *harden, PORT: "4200", LEDGER_URL: "http://ledger:4000" }
 
+  # Read-only operator view of the ledger: balances, payments, audit log
+  dashboard:
+    <<: *svc
+    command: npx tsx src/entry/dashboard.ts
+    depends_on: { ledger: { condition: service_healthy } }
+    ports: [ "127.0.0.1:4500:4500" ]
+    environment: { <<: *harden, PORT: "4500", LEDGER_URL: "http://ledger:4000" }
+
   # one-shot: docker compose run --rm agent "Pay the Initech invoice"
   agent:
     build: { context: ., target: base }

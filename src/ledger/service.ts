@@ -56,6 +56,11 @@ export class LedgerService {
 
   // ---- reads -------------------------------------------------------------------------------------------------
 
+  /** Every account, for the read-only dashboard. */
+  listAccounts() {
+    return this.all('SELECT id, name, balance FROM accounts ORDER BY id').map((r) => ({ id: r.id as string, name: r.name as string, balance: String(r.balance) }));
+  }
+
   getAccount(id: string) {
     const r = this.one('SELECT id, name, balance FROM accounts WHERE id = ?', id);
     if (!r) throw new HttpError(404, 'account_not_found');

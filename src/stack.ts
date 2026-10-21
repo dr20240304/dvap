@@ -2,6 +2,7 @@ import path from 'node:path';
 import { DEFAULT_PORTS, dataDir, envPort, type Keys } from './common/config';
 import { listen, type RunningService } from './common/service';
 import { createApprovalUiApp } from './approval-ui';
+import { createDashboardApp } from './dashboard';
 import { createFacilitatorApp } from './facilitator';
 import { createIntakeApp } from './intake';
 import { openDb } from './ledger/db';
@@ -15,7 +16,7 @@ import { createVendorMcpApp } from './vendor-mcp';
 export interface Stack {
   keys: Keys;
   ledger: LedgerService;
-  urls: { ledger: string; facilitator: string; merchant: string; mcp: string; approval: string; vendorMcp: string; intake: string };
+  urls: { ledger: string; facilitator: string; merchant: string; mcp: string; approval: string; vendorMcp: string; intake: string; dashboard: string };
   close(): Promise<void>;
 }
 
@@ -50,10 +51,13 @@ export async function startStack(opts: { dir?: string; ephemeral?: boolean; rese
   const intake = await listen('invoice-intake', createIntakeApp({ ledgerUrl: ledger.url, serviceKey: keys.serviceKey }), p('intake'));
   running.push(intake);
 
+  const dashboard = await listen('dashboard', createDashboardApp({ ledgerUrl: ledger.url, serviceKey: keys.serviceKey }), p('dashboard'));
+  running.push(dashboard);
+
   return {
     keys,
     ledger: ledgerSvc,
-    urls: { ledger: ledger.url, facilitator: facilitator.url, merchant: merchant.url, mcp: `${mcp.url}/mcp`, approval: approval.url, vendorMcp: `${vendor.url}/mcp`, intake: intake.url },
+    urls: { ledger: ledger.url, facilitator: facilitator.url, merchant: merchant.url, mcp: `${mcp.url}/mcp`, approval: approval.url, vendorMcp: `${vendor.url}/mcp`, intake: intake.url, dashboard: dashboard.url },
     async close() {
       await Promise.all(running.map((s) => s.close()));
       db.close();
@@ -67,6 +71,7 @@ if (isMain) {
   startStack().then((s) => {
     console.log('\nPayPilot is up.');
     console.log(`  Approval UI : ${s.urls.approval}`);
+    console.log(`  Dashboard   : ${s.urls.dashboard}   (read-only ledger view)`);
     console.log(`  MCP endpoint: ${s.urls.mcp}`);
     console.log(`  Invoice inbox: POST ${s.urls.intake}/invoices/pdf  (application/pdf)`);
     console.log('  Try: npm run agent -- "Pay the Initech invoice"   (then approve in the UI)\n');

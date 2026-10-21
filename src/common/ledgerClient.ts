@@ -55,6 +55,7 @@ export class LedgerClient {
   getAgent = (id: string) => this.call<AgentDto>('GET', `/agents/${encodeURIComponent(id)}`);
   authAgent = (token: string) => this.call<AgentDto>('POST', '/auth/agent', { token });
   authApprover = (token: string) => this.call<{ id: string; name: string }>('POST', '/auth/approver', { token });
+  listAccounts = () => this.call<{ accounts: { id: string; name: string; balance: string }[] }>('GET', '/accounts');
   getAccount = (id: string) => this.call<{ id: string; name: string; balance: string }>('GET', `/accounts/${encodeURIComponent(id)}`);
   listPayees = () => this.call<{ payees: { id: string; name: string; accountId: string; verified: boolean }[] }>('GET', '/payees');
   listInvoices = (status?: string) =>

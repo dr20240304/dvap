@@ -9,6 +9,8 @@ Four demos, one attack chain: **Prompt → Approve → Pay → Pwn**. Each demo 
 | 3 Pay | [03-pay.md](03-pay.md) | a paywall and a merchant's 402 | the paywall bypass needs none; the rogue-merchant run uses the agent |
 | 4 Pwn | [04-pwn.md](04-pwn.md) | a reporting tool | no |
 
+Tip: open the live ledger dashboard at http://127.0.0.1:4500 next to the CFO page (http://127.0.0.1:4200) while you run a demo. It shows balances, payments and the audit log as they change, so you rarely need `make d-status`.
+
 Before every demo run `make d-reset` (Docker) or `npm run seed -- --reset` (local). The ledger allows one active payment per invoice, so a second run on a dirty stack ends in `duplicate_payment`.
 
 For every bug see [../BUG_CATALOG.md](../BUG_CATALOG.md). `make rehearse` runs every demo beat in Docker, vulnerable and hardened, and checks the results.

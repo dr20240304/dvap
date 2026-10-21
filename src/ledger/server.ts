@@ -27,6 +27,7 @@ export function createLedgerApp(ledger: LedgerService, serviceKey: string): Expr
     next();
   });
 
+  app.get('/accounts', wrap(() => ({ accounts: ledger.listAccounts() })));
   app.get('/accounts/:id', wrap((req) => ledger.getAccount(String(req.params.id))));
   app.get('/payees', wrap(() => ({ payees: ledger.listPayees() })));
   app.get('/invoices', wrap((req) => ({ invoices: ledger.listInvoices(typeof req.query.status === 'string' ? req.query.status : undefined) })));

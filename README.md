@@ -17,6 +17,7 @@ flowchart LR
   A["Agent<br/>PayPilot"] -- MCP --> M["payments-mcp :4100"]
   M --> L
   CFO([CFO]) --> U["approval-ui :4200"] --> L
+  L -. read-only .-> D["dashboard :4500"]
   A -- "x402: 402, sign, retry" --> MA["merchant-api :4021<br/>paid API behind a 402"]
   MA --> F["facilitator :4022<br/>verify and settle"] --> L
   A -. optional third-party tools .-> V["vendor-mcp :4300"]
@@ -31,6 +32,7 @@ flowchart LR
 | intake | 4400 | Acme's AP mailbox: reads invoice PDFs (text extraction) and files them in the ledger. Anyone can send one |
 | payments-mcp | 4100 | MCP server (Streamable HTTP, bearer auth): the agent's tool surface |
 | approval-ui | 4200 | CFO approval page |
+| dashboard | 4500 | Read-only operator view of the ledger: balances, payments and the audit log, live. Open it beside the approval page while you run a demo |
 | vendor-mcp | 4300 | A third-party MCP server the agent can be pointed at (attacker side) |
 | rogue merchant | 4666 | Globex's hostile 402 server (attacker side, started on demand) |
 | agent | – | A **scripted** agent: a deterministic stand-in for a gullible LLM, so attacks never flake. A real model can be used instead (see [More labs](#more-labs)) |
@@ -66,7 +68,7 @@ make d-status           # balances, pending payments, audit tail
 make d-reset            # fresh world (between demos)
 make d-down             # stop and remove everything
 ```
-The CFO approval page is at http://127.0.0.1:4200.
+The CFO approval page is at http://127.0.0.1:4200, and a live read-only ledger view (balances, payments, audit log) at http://127.0.0.1:4500.
 
 **Local:**
 ```bash

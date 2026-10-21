@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const DEFAULT_PORTS = { ledger: 4000, facilitator: 4022, merchant: 4021, mcp: 4100, approval: 4200, rogue: 4666, vendor: 4300, intake: 4400 } as const;
+export const DEFAULT_PORTS = { ledger: 4000, facilitator: 4022, merchant: 4021, mcp: 4100, approval: 4200, rogue: 4666, vendor: 4300, intake: 4400, dashboard: 4500 } as const;
 
 export const NETWORK = 'dvap:local';
 export const ASSET = 'USDC';
