@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# runtime data and secrets (DVAP writes its keys here) -- never commit
+.dvap-data/
+.env
+.env.*
+!.env.example
+
+# crafted attack artifacts (make craft-invoice)
+/out/
+
+# build and test output
+dist/
+coverage/
+*.log
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.scan-venv/
+
+# foundry build output (the vendored onchain/lib stays in the repo)
+onchain/out/
+onchain/cache/
+onchain/broadcast/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

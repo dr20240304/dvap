@@ -1,0 +1,14 @@
+node_modules
+.dvap-data
+.env
+.git
+out
+dist
+coverage
+*.log
+__pycache__
+*.pyc
+.venv
+.scan-venv
+.DS_Store
+onchain

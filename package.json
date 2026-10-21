@@ -1,0 +1,39 @@
+{
+  "name": "dvap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Damn Vulnerable Agentic Payments \u2014 PayPilot, an intentionally vulnerable AI accounts-payable agent (INTENTIONALLY VULNERABLE; never deploy)",
+  "type": "module",
+  "license": "MIT",
+  "author": "Deepak Rathore",
+  "repository": {"type": "git", "url": "git+https://github.com/dr20240304/dvap.git"},
+  "bugs": {"url": "https://github.com/dr20240304/dvap/issues"},
+  "homepage": "https://github.com/dr20240304/dvap#readme",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "seed": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx scripts/seed.ts",
+    "dev": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx src/stack.ts",
+    "agent": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx src/agent/index.ts",
+    "test": "NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run",
+    "typecheck": "tsc --noEmit",
+    "rogue": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx src/attacker/rogue-merchant.ts",
+    "pay": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx scripts/pay.ts",
+    "llm-eval": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx scripts/llm-eval.ts",
+    "serve": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx scripts/serve.ts",
+    "vendor-mcp": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx src/vendor-mcp/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "express": "^4.21.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

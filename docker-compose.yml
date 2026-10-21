@@ -1,0 +1,134 @@
+# DVAP — INTENTIONALLY VULNERABLE. Ports are published on 127.0.0.1 only. Fictional money.
+# Every service (and the one-shot agent/tools containers) reads DVAP_HARDEN, so "one flag" fixes work in Docker too.
+# `make d-harden H=V3` writes it to ./.env, which compose loads for both `up` and `run`; `make d-harden H=` clears it.
+x-harden: &harden
+  DVAP_HARDEN: ${DVAP_HARDEN:-}
+
+x-svc: &svc
+  build: { context: ., target: base }
+  restart: unless-stopped
+  volumes: [ "dvap-data:/data" ]
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    interval: 2s
+    timeout: 3s
+    retries: 30
+
+services:
+  init-data:
+    # the shared volume is created root-owned; hand it to the unprivileged "node" user once
+    image: node:22-slim
+    user: root
+    command: chown -R node:node /data
+    volumes: [ "dvap-data:/data" ]
+    restart: "no"
+
+  ledger:
+    <<: *svc
+    command: npx tsx src/entry/ledger.ts
+    depends_on: { init-data: { condition: service_completed_successfully } }
+    ports: [ "127.0.0.1:4000:4000" ]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    environment: { <<: *harden, PORT: "4000" }
+
+  facilitator:
+    <<: *svc
+    command: npx tsx src/entry/facilitator.ts
+    depends_on: { ledger: { condition: service_healthy } }
+    ports: [ "127.0.0.1:4022:4022" ]
+    environment: { <<: *harden, PORT: "4022", LEDGER_URL: "http://ledger:4000" }
+
+  merchant:
+    <<: *svc
+    command: npx tsx src/entry/merchant.ts
+    depends_on: [ facilitator ]
+    ports: [ "127.0.0.1:4021:4021" ]
+    environment: { <<: *harden, PORT: "4021", FACILITATOR_URL: "http://facilitator:4022" }
+
+  # Globex's hostile 402 server (Chapter 3). Only started with: docker compose --profile attacker up -d rogue
+  rogue:
+    <<: *svc
+    profiles: [ "attacker" ]
+    command: npx tsx src/entry/rogue.ts
+    depends_on: [ facilitator ]
+    ports: [ "127.0.0.1:4666:4666" ]
+    environment: { <<: *harden, PORT: "4666", FACILITATOR_URL: "http://facilitator:4022", ROGUE_INJECT: "${ROGUE_INJECT:-}" }
+
+  # Third-party MCP server the agent can be pointed at (Chapter 1). Not part of Acme's trust boundary.
+  vendor-mcp:
+    <<: *svc
+    profiles: [ "attacker" ]
+    command: npx tsx src/entry/vendor.ts
+    ports: [ "127.0.0.1:4300:4300" ]
+    environment: { <<: *harden, PORT: "4300", FACILITATOR_URL: "http://facilitator:4022" }
+    depends_on: [ facilitator ]
+
+  mcp:
+    <<: *svc
+    command: npx tsx src/entry/mcp.ts
+    depends_on: { ledger: { condition: service_healthy } }
+    ports: [ "127.0.0.1:4100:4100" ]
+    environment: { <<: *harden, PORT: "4100", LEDGER_URL: "http://ledger:4000" }
+
+  # Acme's AP mailbox: reads invoice PDFs from suppliers and files them in the ledger (Chapter 1, PDF delivery)
+  intake:
+    <<: *svc
+    command: npx tsx src/entry/intake.ts
+    depends_on: { ledger: { condition: service_healthy } }
+    ports: [ "127.0.0.1:4400:4400" ]
+    environment: { <<: *harden, PORT: "4400", LEDGER_URL: "http://ledger:4000" }
+
+  approval:
+    <<: *svc
+    command: npx tsx src/entry/approval.ts
+    depends_on: { ledger: { condition: service_healthy } }
+    ports: [ "127.0.0.1:4200:4200" ]
+    environment: { <<: *harden, PORT: "4200", LEDGER_URL: "http://ledger:4000" }
+
+  # one-shot: docker compose run --rm agent "Pay the Initech invoice"
+  agent:
+    build: { context: ., target: base }
+    profiles: [ "tools" ]
+    entrypoint: ["npx", "tsx", "src/agent/index.ts"]   # entrypoint (not command) so the prompt argument is appended
+    volumes: [ "dvap-data:/data:ro" ]
+    environment:
+      <<: *harden
+      MCP_URL: http://mcp:4100/mcp
+      MERCHANT_URL: ${MERCHANT_URL:-http://merchant:4021}        # e.g. http://rogue:4666 (chapter 3)
+      VENDOR_MCP_URL: ${VENDOR_MCP_URL:-}                        # e.g. http://vendor-mcp:4300/mcp (chapter 1)
+      AGENT_VET: ${AGENT_VET:-}                                  # off = skip the paid vendor check (the simple PDF demo)
+      ENRICH_VENDOR: ${ENRICH_VENDOR:-}                          # 1 = also call the vendor's paid enrich_vendor tool (V22)
+      APPROVAL_TIMEOUT_MS: ${APPROVAL_TIMEOUT_MS:-120000}
+      AGENT_MODE: ${AGENT_MODE:-}                                # llm = a real model (Ollama on the host) instead of the scripted agent
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gpt-oss:20b}
+    extra_hosts: [ "host.docker.internal:host-gateway" ]
+    depends_on: [ mcp, merchant ]
+
+  # Attack / scan / test toolbox: Node + Python, on the same network, with read-only access to the data volume.
+  #   docker compose run --rm tools python3 tooling/status.py
+  tools:
+    build: { context: ., target: tools }
+    profiles: [ "tools" ]
+    volumes:
+      - dvap-data:/data:ro
+      # edit tooling/tests on the host and re-run without rebuilding the image
+      - ./tooling:/app/tooling:ro
+      - ./test:/app/test:ro
+      - ./docs:/app/docs:ro
+      - ./hints:/app/hints:ro
+    environment:
+      <<: *harden
+      LEDGER_URL: http://ledger:4000
+      MCP_URL: http://mcp:4100/mcp
+      MERCHANT_URL: http://merchant:4021
+      ROGUE_URL: http://rogue:4666
+      VENDOR_MCP_URL: http://vendor-mcp:4300/mcp
+    depends_on: [ mcp, merchant ]
+
+volumes:
+  dvap-data:
