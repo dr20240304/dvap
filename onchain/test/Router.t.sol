@@ -256,3 +256,101 @@ contract O4_Reentrancy is RouterBase {
         payFails(r, c, vendor, 100 * ONE, 1, block.timestamp, "intent nonce");
     }
 }
+
+/// O5: signed intents never expire; a withheld intent is executed 30 days later.
+contract O5_StaleIntent is RouterBase {
+    function _signed(IRouter r) internal view returns (Config memory c, bytes memory os, Intent memory i, bytes memory as_) {
+        c = config(vendor, 100 * ONE, 100 * ONE);
+        i = Intent({owner: alice, to: vendor, amount: 100 * ONE, intentNonce: 1, ts: block.timestamp});
+        os = sign(aliceKey, r.configDigest(c));
+        as_ = sign(agentKey, r.intentDigest(i));
+    }
+
+    function test_vulnerable_a_month_old_intent_still_pays() public {
+        IRouter r = build(0);
+        fund(alice, 1000 * ONE, r);
+        (Config memory c, bytes memory os, Intent memory i, bytes memory as_) = _signed(r);
+        vm.warp(block.timestamp + 30 days); // the invoice was cancelled meanwhile; nobody told the contract
+        vm.prank(mallory);
+        r.executePayment(c, os, i, as_);
+        assertEq(usdc.balanceOf(vendor), 100 * ONE);
+    }
+
+    function test_fixed_intent_expires() public {
+        IRouter r = build(LibStorage.O5_EXPIRY);
+        fund(alice, 1000 * ONE, r);
+        (Config memory c, bytes memory os, Intent memory i, bytes memory as_) = _signed(r);
+        vm.warp(block.timestamp + 30 days);
+        vm.expectRevert("stale intent");
+        r.executePayment(c, os, i, as_);
+        // a fresh intent inside the window still works
+        vm.warp(block.timestamp - 30 days + 10 minutes);
+        r.executePayment(c, os, i, as_);
+        assertEq(usdc.balanceOf(vendor), 100 * ONE);
+    }
+
+    function test_fixed_a_timestamp_from_the_future_is_refused() public {
+        IRouter r = build(LibStorage.O5_EXPIRY);
+        fund(alice, 1000 * ONE, r);
+        Config memory c = config(vendor, 100 * ONE, 100 * ONE);
+        payFails(r, c, vendor, 10 * ONE, 1, block.timestamp + 1 days, "stale intent");
+    }
+}
+
+/// O6: the owner's config leaves `agent` unset (address(0)); an invalid signature "recovers" to address(0) and passes.
+contract O6_ZeroSigner is RouterBase {
+    function _attack(IRouter r) internal {
+        fund(alice, 1000 * ONE, r);
+        Config memory c = Config({owner: alice, agent: address(0), recipient: vendor, maxPerTx: 100 * ONE, dailyCap: 100 * ONE, configNonce: 0});
+        bytes memory os = sign(aliceKey, r.configDigest(c)); // a half-filled config the owner signed (a template, a draft)
+        Intent memory i = Intent({owner: alice, to: vendor, amount: 100 * ONE, intentNonce: 1, ts: block.timestamp});
+        bytes memory garbage = abi.encodePacked(bytes32(0), bytes32(0), uint8(27)); // not a signature by anyone
+        vm.prank(mallory);
+        r.executePayment(c, os, i, garbage);
+    }
+
+    function test_vulnerable_garbage_signature_authorises_a_payment() public {
+        IRouter r = build(0);
+        _attack(r);
+        assertEq(usdc.balanceOf(vendor), 100 * ONE); // no agent ever approved this
+    }
+
+    function test_fixed_invalid_signature_is_rejected() public {
+        IRouter r = build(LibStorage.O6_ZERO_SIGNER);
+        vm.expectRevert("bad sig");
+        this.attackFixed(r);
+        assertEq(usdc.balanceOf(vendor), 0);
+    }
+
+    function attackFixed(IRouter r) external { _attack(r); }
+}
+
+/// O7: the agent's signature does not cover the amount, so whoever relays the intent can raise it to the per-tx cap.
+contract O7_UnsignedAmount is RouterBase {
+    function _relay(IRouter r) internal {
+        fund(alice, 1000 * ONE, r);
+        Config memory c = config(vendor, 100 * ONE, 100 * ONE);
+        bytes memory os = sign(aliceKey, r.configDigest(c));
+        Intent memory approved = Intent({owner: alice, to: vendor, amount: 10 * ONE, intentNonce: 1, ts: block.timestamp});
+        bytes memory as_ = sign(agentKey, r.intentDigest(approved)); // the agent approved $10
+        Intent memory tampered = approved;
+        tampered.amount = 100 * ONE; // the relayer swaps in the maximum
+        vm.prank(mallory);
+        r.executePayment(c, os, tampered, as_);
+    }
+
+    function test_vulnerable_relayer_turns_10_into_100() public {
+        IRouter r = build(0);
+        _relay(r);
+        assertEq(usdc.balanceOf(vendor), 100 * ONE);
+    }
+
+    function test_fixed_amount_is_part_of_the_signature() public {
+        IRouter r = build(LibStorage.O7_AMOUNT);
+        vm.expectRevert("agent sig");
+        this.relayFixed(r);
+        assertEq(usdc.balanceOf(vendor), 0);
+    }
+
+    function relayFixed(IRouter r) external { _relay(r); }
+}

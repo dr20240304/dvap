@@ -133,7 +133,7 @@ make d-reset && make d-ch2 && make d-harden H=V10 && make d-coda    # "V10 block
 ## More labs
 - **Real LLM instead of the scripted agent:** `make d-agent-llm` / `make llm-eval` run the agent on an Ollama model and measure how often an attack works. See [docs/LLM_MODE.md](docs/LLM_MODE.md).
 - **Scanners:** `make scan` is a small heuristic MCP scanner; `make scan3` runs third-party scanners. See [docs/SCANNER_RESULTS.md](docs/SCANNER_RESULTS.md).
-- **On-chain demo:** a separate Foundry project with four bugs in a payment router contract. `make onchain-test`, `make onchain-demo` (needs Foundry). See [onchain/README.md](onchain/README.md).
+- **On-chain demo:** a separate Foundry project with seven bugs (O1 to O7) in a payment router contract. `make onchain-test`, `make onchain-demo` (needs Foundry). See [onchain/README.md](onchain/README.md).
 - **More bugs (all switchable and tested):** V9 secrets in logs, V11 shared memory, V12 batch daily-cap race, V14 shadow MCP, V20 unit-confused price cap, V21 unbounded validity window, V23 ReDoS, V24 receipt without transfer check, V25 sponsor draining, V26 override without ceiling, V27 Host-header trust, V30 SSRF with ambient service key, V32 ambient workspace config, V33 approval accepted as payment, V34 wallet-login relay (the last two from the Oct 2026 x402 SDK advisory). Full list with code locations: [docs/BUG_CATALOG.md](docs/BUG_CATALOG.md).
 - **Stuck?** [hints/](hints/README.md) has three spoiler levels per step. `docs/BUG_CATALOG.md` is a spoiler.
 
