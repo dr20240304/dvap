@@ -36,18 +36,23 @@ contract PaymentModule {
     }
 
     function intentDigest(Intent memory i) public view returns (bytes32) {
-        bytes32 h = keccak256(abi.encode(INTENT_TYPEHASH, i.owner, i.to, i.amount, i.intentNonce, i.ts));
+        // O7: the vulnerable digest hashes a zero where the amount belongs, so the agent's signature approves "a payment to this
+        // payee with this nonce" at ANY amount. Whoever relays the signed intent (a bundler, a mempool watcher) picks the amount.
+        uint256 signedAmount = LibStorage.fixed_(LibStorage.O7_AMOUNT) ? i.amount : 0;
+        bytes32 h = keccak256(abi.encode(INTENT_TYPEHASH, i.owner, i.to, signedAmount, i.intentNonce, i.ts));
         h = keccak256(abi.encode(h, block.chainid, address(this)));
         return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", h));
     }
 
-    function _recover(bytes32 d, bytes memory sig) internal pure returns (address) {
+    function _recover(bytes32 d, bytes memory sig) internal view returns (address) {
         require(sig.length == 65, "bad sig");
         bytes32 r; bytes32 s; uint8 v;
         assembly { r := mload(add(sig, 32)) s := mload(add(sig, 64)) v := byte(0, mload(add(sig, 96))) }
         require(uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0, "malleable s");
         address a = ecrecover(d, v, r, s);
-        require(a != address(0), "bad sig");
+        // O6: ecrecover returns address(0) for ANY invalid signature instead of reverting. Without this check, a config whose
+        // `agent` was left unset (address(0)) accepts garbage as the agent's signature, and anyone can submit payments.
+        if (LibStorage.fixed_(LibStorage.O6_ZERO_SIGNER)) require(a != address(0), "bad sig");
         return a;
     }
 
@@ -62,6 +67,10 @@ contract PaymentModule {
         require(_recover(intentDigest(i), agentSig) == c.agent, "agent sig");
         require(i.owner == c.owner, "owner mismatch");
         require(i.intentNonce == o.intentNonce + 1, "intent nonce");
+        // O5: the intent carries a timestamp but nothing bounds it, so a signed intent stays executable until its nonce is used.
+        // A relayer that withholds it (or an attacker who copied it from a queue) can run it weeks later, after the invoice it
+        // paid was cancelled or the vendor's account changed.
+        if (LibStorage.fixed_(LibStorage.O5_EXPIRY)) require(i.ts <= block.timestamp && block.timestamp - i.ts <= LibStorage.MAX_INTENT_AGE, "stale intent");
         require(i.to == c.recipient, "recipient not allowed");
         require(i.amount <= c.maxPerTx, "over per-tx cap");
 

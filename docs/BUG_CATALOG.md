@@ -46,7 +46,7 @@ V31 (CI control rot) is documented only and not built. Every other bug in `PUBLI
 
 ## On-chain bugs (Foundry, `onchain/`)
 O1 re-callable initializer -> router takeover -> drain of all allowances; O2 daily-cap bucket chosen by the signer; O3 config signature without
-chain/contract binding (cross-deployment replay); O4 reentrancy via a token receiver hook. Each has a test for the exploit and for the fix. See
+chain/contract binding (cross-deployment replay); O4 reentrancy via a token receiver hook; O5 signed intents never expire; O6 `ecrecover` zero address accepted as a signer; O7 the agent's signature does not cover the amount. Each has a test for the exploit and for the fix. See
 `onchain/README.md`. A small example contract, not audited code.
 
 ## How the "injection" works (honesty note)

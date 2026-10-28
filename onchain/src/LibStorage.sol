@@ -16,7 +16,11 @@ library LibStorage {
     uint256 constant O2_DAYKEY = 2;    // daily cap bucket chosen by the signer
     uint256 constant O3_DOMAIN = 4;    // config signature has no chain / contract binding
     uint256 constant O4_REENTRY = 8;   // nonce and cap updated after the token call
-    uint256 constant ALL = 15;
+    uint256 constant O5_EXPIRY = 16;   // signed intents never expire
+    uint256 constant O6_ZERO_SIGNER = 32; // ecrecover's address(0) accepted as a valid signer
+    uint256 constant O7_AMOUNT = 64;   // the agent's signature does not cover the amount
+    uint256 constant ALL = 127;
+    uint256 constant MAX_INTENT_AGE = 1 hours;
 
     struct OwnerState {
         uint256 configNonce;
