@@ -28,7 +28,7 @@ export function createFacilitatorApp(cfg: FacilitatorConfig): Express {
   app.use(express.json({ limit: '64kb' }));
 
   /** Pure checks of a payment against what the resource server asked for. Never trusts the payload's own claims. */
-  async function verify(payload: PaymentPayload, req: Requirement, resourceUrl?: string): Promise<VerifyResponse & { agentWallet?: string }> {
+  async function verify(payload: PaymentPayload, req: Requirement, resourceUrl?: string): Promise<VerifyResponse & { agentWallet?: string; kind?: 'transfer' | 'approve' }> {
     const bad = (invalidReason: string): VerifyResponse => ({ isValid: false, invalidReason });
     if (payload?.x402Version !== 2) return bad('unsupported_version');
     if (req.scheme !== 'exact' || payload.accepted?.scheme !== 'exact') return bad('unsupported_scheme');
@@ -63,9 +63,18 @@ export function createFacilitatorApp(cfg: FacilitatorConfig): Express {
     if (hardened('V18') && (a.resource !== resourceUrl || payload.resource?.url !== resourceUrl)) return bad('resource_mismatch');
     if (!verifyMessage(agent.publicKey, signingMessage(req.network, req.asset, a), payload.payload.signature)) return bad('invalid_signature');
     if ((await ledger.nonceUsed(a.nonce)).used) return bad('nonce_already_used');
-    const bal = Number((await ledger.getAccount(agent.walletAccount)).balance);
-    if (bal < want) return bad('insufficient_funds');
-    return { isValid: true, payer: agent.id, agentWallet: agent.walletAccount };
+    // V33: the signed instruction must be a transfer. VULNERABLE BY DEFAULT: the facilitator checks that the instruction is one of the
+    // token program's (transfer or approve) but not WHICH one, so a signed `approve` (an allowance; it moves nothing and needs no balance)
+    // passes verify, "settles" with no funds moved, and the merchant releases the resource. Same bug class as the x402 Solana facilitator
+    // that accepted a token approval as payment (SDK advisory, Oct 2026): the two differ in one leading byte.
+    // DVAP_HARDEN=V33: only `transfer` is a payment.
+    const kind = a.kind ?? 'transfer';
+    if (kind !== 'transfer' && (hardened('V33') || kind !== 'approve')) return bad('wrong_instruction');
+    if (kind === 'transfer') {
+      const bal = Number((await ledger.getAccount(agent.walletAccount)).balance);
+      if (bal < want) return bad('insufficient_funds');
+    }
+    return { isValid: true, payer: agent.id, agentWallet: agent.walletAccount, kind };
   }
 
   const route = (fn: (req: Request) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => {
@@ -82,7 +91,7 @@ export function createFacilitatorApp(cfg: FacilitatorConfig): Express {
 
   app.post('/verify', route(async (req) => {
     const { paymentPayload, paymentRequirements, resourceUrl } = bodySchema.parse(req.body);
-    const { agentWallet: _w, ...out } = await verify(paymentPayload, paymentRequirements, resourceUrl);
+    const { agentWallet: _w, kind: _k, ...out } = await verify(paymentPayload, paymentRequirements, resourceUrl);
     return out;
   }));
 
@@ -103,6 +112,8 @@ export function createFacilitatorApp(cfg: FacilitatorConfig): Express {
         throw e;
       }
     }
+    // V33 (default): an `approve` passed verify, so it is "settled" without any transfer: success, no funds moved, fee already sponsored.
+    if (v.kind === 'approve') return { success: true, transaction: `approve-${a.nonce}`, network: NETWORK, payer: v.payer };
     try {
       const { transaction } = await ledger.transfer({
         payFee: hardened('V25'),

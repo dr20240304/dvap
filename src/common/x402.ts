@@ -18,6 +18,8 @@ export interface PaymentRequired {
   error?: string;
   resource: { url: string; description: string; mimeType: string };
   accepts: Requirement[];
+  /** Optional protocol extensions. `siwx` asks the client to also sign a "sign in with your wallet" message (V34). */
+  extensions?: { siwx?: { message: string } };
 }
 
 export interface Authorization {
@@ -28,6 +30,11 @@ export interface Authorization {
   nonce: string;
   /** URL this payment is for. Signed with the rest; only enforced when DVAP_HARDEN includes V18. */
   resource?: string;
+  /**
+   * What the signed instruction does, like the instruction type of a token-program call. `transfer` moves funds; `approve` only
+   * grants an allowance and moves nothing. Absent means `transfer`. Only `transfer` is a payment; the facilitator accepts `approve` unless V33 is hardened.
+   */
+  kind?: 'transfer' | 'approve';
 }
 
 export interface PaymentPayload {
@@ -54,6 +61,7 @@ export interface SettleResponse {
 export const HEADER_REQUIRED = 'payment-required';
 export const HEADER_SIGNATURE = 'payment-signature';
 export const HEADER_RESPONSE = 'payment-response';
+export const HEADER_SIGNIN = 'sign-in-with-x';
 
 /** Exactly the bytes that get signed: domain (network+asset) bound to the authorization. */
 export function signingMessage(network: string, asset: string, auth: Authorization): string {

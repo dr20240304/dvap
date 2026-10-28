@@ -2,8 +2,9 @@ import { ASSET, NETWORK } from '../common/config';
 import { b64json, parseB64json, randomHex, signMessage } from '../common/crypto';
 import { hardened } from '../common/harden';
 import { parseMicros } from '../common/money';
+import { parseSiwxMessage, type SiwxPayload } from '../common/siwx';
 import {
-  HEADER_REQUIRED, HEADER_RESPONSE, HEADER_SIGNATURE,
+  HEADER_REQUIRED, HEADER_RESPONSE, HEADER_SIGNATURE, HEADER_SIGNIN,
   signingMessage, type Authorization, type PaymentPayload, type PaymentRequired, type Requirement, type SettleResponse,
 } from '../common/x402';
 
@@ -49,6 +50,24 @@ export function guardChallenge(requestedUrl: string, pr: PaymentRequired, req: R
   if (new URL(pr.resource.url).origin !== new URL(requestedUrl).origin) throw new Error('challenge_rejected: resource origin mismatch');
 }
 
+/**
+ * V34: answering a server's "sign in with your wallet" request. VULNERABLE BY DEFAULT: the client signs whatever message the 402 carries.
+ * The message names the site it logs in to, but nothing compares that with the site that sent the 402, so a hostile server can fetch a
+ * fresh login message from a DIFFERENT site and have the agent sign it, then replay the signature there as the agent's wallet.
+ * DVAP_HARDEN=V34: the message must name the host we requested and the signer's own address (the same check the fixed x402 clients make
+ * by passing the 402's URL into `createSIWxPayload`).
+ */
+export function buildSignIn(requestedUrl: string, message: string, signer: Signer): string {
+  if (hardened('V34')) {
+    const f = parseSiwxMessage(message);
+    if (!f) throw new Error('siwx_rejected: malformed message');
+    if (f.domain !== new URL(requestedUrl).host) throw new Error(`siwx_rejected: message is for ${f.domain}, not ${new URL(requestedUrl).host}`);
+    if (f.address !== signer.agentId) throw new Error('siwx_rejected: message names another address');
+  }
+  const payload: SiwxPayload = { message, signature: signMessage(signer.privateKey, message), address: signer.agentId };
+  return b64json(payload);
+}
+
 /** Sign an authorization for `req` and return the PAYMENT-SIGNATURE header value. */
 export function buildPaymentHeader(
   url: string, pr: PaymentRequired, req: Requirement, signer: Signer, now: () => number = () => Math.floor(Date.now() / 1000),
@@ -89,9 +108,11 @@ export async function fetchPaid(
   if (!req) throw new Error('no supported payment option in challenge');
   guardChallenge(url, pr, req, policy);
 
+  const extra: Record<string, string> = {};
+  if (pr.extensions?.siwx) extra[HEADER_SIGNIN] = buildSignIn(url, pr.extensions.siwx.message, signer);
   const header = buildPaymentHeader(url, pr, req, signer, now);
 
-  const second = await fetch(url, { redirect, headers: { [HEADER_SIGNATURE]: header } });
+  const second = await fetch(url, { redirect, headers: { [HEADER_SIGNATURE]: header, ...extra } });
   const body = await readBody(second);
   if (second.status !== 200) return { status: second.status, body };
   const settle = second.headers.get(HEADER_RESPONSE) ? parseB64json<SettleResponse>(second.headers.get(HEADER_RESPONSE)!) : undefined;

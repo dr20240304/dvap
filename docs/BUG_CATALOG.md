@@ -13,7 +13,7 @@ The OWASP column is **our own judgement** of the closest item (OWASP MCP Top 10 
 | V5 | 2 Approve | 4 Policy | Any caller can use any tool, incl. `configure_payment_policy` (no per-tool scope) | MCP02, ASI03 | `payments-mcp` `guard()` | same |
 | V8 | 2 Approve | 5 Approve | Approval screen shows the agent's summary, not the real payee | ASI09 | `approval-ui` `describePayment` | same |
 | V15 | 3 Pay | 6 Pay | Paywall gate and router parse the path differently (case, `//`) | (no direct item) | `merchant/index.ts` | `chapter3.test.ts`, `test_chapter3.py` |
-| V7 | 3 Pay | 6 Pay | Agent signs any 402 it is handed: no payee pin / max price | ASI02 (closest) | `agent/x402-client.ts` `guardChallenge` | same + `x402.test.ts` |
+| V7 | 3 Pay | 6 Pay | Agent signs any 402 it is handed: no payee pin / max price (the same gap as the x402 SDK's "no default spending limit": a hostile API can ask for the wallet's whole balance) | ASI02 (closest) | `agent/x402-client.ts` `guardChallenge` | same + `x402.test.ts` |
 | V18 | 3 Pay | 6 Pay | Payment not bound to the resource it was signed for | (no direct item) | `facilitator/index.ts` | `chapter3.test.ts` |
 | V19 | 3 Pay | 6 Pay | Payer follows redirects and forwards its payment header | MCP01-ish (credential leak) | `agent/x402-client.ts` | `chapter3.test.ts` |
 | V16 | 3 Pay | 6 Pay | Resource server fails open on facilitator errors and releases the body when settle fails (overdraft race) | (no direct item) | `merchant/paywall.ts` | `chapter3.test.ts` |
@@ -34,13 +34,15 @@ The OWASP column is **our own judgement** of the closest item (OWASP MCP Top 10 
 | V27 | 2 Approve | 3 Identity | Services trust any Host header (DNS rebinding) | MCP07 | `common/hostGuard.ts` | same |
 | V30 | 2 Approve | 3 Identity | SSRF: server-side fetch of any URL with the internal service key attached, redirects followed | MCP05/MCP07-ish | `payments-mcp` `fetch_remittance_advice` | same |
 | V32 | 3 Pay | 1 Ingest | Ambient authority: a project-local `.paypilot.json` is trusted like operator config | MCP04-ish, ASI03 | `agent/settings.ts` | same |
+| V33 | 3 Pay | 7 Settle | Facilitator accepts a signed token *approval* as a payment: it checks the instruction belongs to the token program, not which one. Verify passes with no balance, settle moves nothing, the merchant releases the resource | (no direct item) | `facilitator/index.ts` | `sdk-flaws.test.ts` |
+| V34 | 3 Pay | 6 Pay | Agent signs a "sign in with your wallet" (SIWx) message from a 402 without checking it names the site it is talking to; a hostile server relays a login message from another site and replays the signature there | MCP07, ASI03 | `agent/x402-client.ts` `buildSignIn`, `merchant/index.ts`, `attacker/rogue-merchant.ts` | `sdk-flaws.test.ts` |
 | V10 | Coda Pwn | 8 Report | Command injection in `export_report`; leaks `keys.json` | MCP05, ASI05 | `payments-mcp` | `coda.test.ts`, `test_coda.py` |
 
 Observable but not a switchable bug: **V13**-style audit blindness. After the coda the audit log attributes the approval to `cfo`, and nothing
 records that no human clicked.
 
 ## Not built
-V31 (CI control rot) is documented only and not built. Every other bug in `PUBLIC_BUG_LESSONS.md` is implemented.
+V31 (CI control rot) is documented only and not built. Every other bug in `PUBLIC_BUG_LESSONS.md` is implemented. V33 and V34 come from the October 2026 x402 SDK advisory (see `PUBLIC_BUG_LESSONS.md` L16).
 
 ## On-chain bugs (Foundry, `onchain/`)
 O1 re-callable initializer -> router takeover -> drain of all allowances; O2 daily-cap bucket chosen by the signer; O3 config signature without

@@ -9,6 +9,10 @@
 - V6: the system prompt says "$5/day". Where is that enforced? Loop the paid call ten times.
 - V22: an MCP tool returns the payment request twice (text and structured). Which one does the agent show, and which one does it sign?
 
+## SDK advisory variants (V33, V34)
+- V33: the facilitator checks the signed instruction is a token-program call. Is every token-program call a payment? What does a wallet with no balance need to sign to get the resource?
+- V34: a 402 can carry a "sign in with your wallet" message. What does the agent check before signing it, and what could a hostile server do with a login message it fetched from somewhere else?
+
 ## More Pay bugs (V20, V21, V24, V25, V32)
 - V20: set the price cap to the number the docs say. What cap does the code actually apply? Then set it to `$1`.
 - V21: how long can a signed payment stay valid? Who checks?

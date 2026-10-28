@@ -47,7 +47,7 @@ services:
     command: npx tsx src/entry/merchant.ts
     depends_on: [ facilitator ]
     ports: [ "127.0.0.1:4021:4021" ]
-    environment: { <<: *harden, PORT: "4021", FACILITATOR_URL: "http://facilitator:4022" }
+    environment: { <<: *harden, PORT: "4021", FACILITATOR_URL: "http://facilitator:4022", LEDGER_URL: "http://ledger:4000" }
 
   # Globex's hostile 402 server (Chapter 3). Only started with: docker compose --profile attacker up -d rogue
   rogue:
@@ -56,7 +56,7 @@ services:
     command: npx tsx src/entry/rogue.ts
     depends_on: [ facilitator ]
     ports: [ "127.0.0.1:4666:4666" ]
-    environment: { <<: *harden, PORT: "4666", FACILITATOR_URL: "http://facilitator:4022", ROGUE_INJECT: "${ROGUE_INJECT:-}" }
+    environment: { <<: *harden, PORT: "4666", FACILITATOR_URL: "http://facilitator:4022", ROGUE_INJECT: "${ROGUE_INJECT:-}", ROGUE_SIWX_TARGET: "${ROGUE_SIWX_TARGET:-}" }
 
   # Third-party MCP server the agent can be pointed at (Chapter 1). Not part of Acme's trust boundary.
   vendor-mcp:

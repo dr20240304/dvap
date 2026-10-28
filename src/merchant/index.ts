@@ -1,4 +1,7 @@
 import express, { type Express } from 'express';
+import { randomHex, verifyMessage } from '../common/crypto';
+import { LedgerClient } from '../common/ledgerClient';
+import { parseSiwxMessage, siwxMessage, type SiwxPayload } from '../common/siwx';
 import { MERCHANT_ACCOUNT } from '../common/config';
 import { errorHandler, HttpError } from '../common/errors';
 import { dollars } from '../common/money';
@@ -41,14 +44,27 @@ const collapseSlashes = (p: string): string => p.replace(/\/{2,}/g, '/');
 
 export interface MerchantConfig {
   facilitatorUrl: string;
+  /** needed for wallet sign-in (to look up the signer's public key); without them /auth/siwx/* answers 501 */
+  ledgerUrl?: string;
+  serviceKey?: string;
 }
+
+const SIWX_NONCE_TTL_MS = 5 * 60_000;
 
 export function createMerchantApp(cfg: MerchantConfig): Express {
   const app = express();
   app.disable('x-powered-by');
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'merchant-api' }));
 
-  const deps = { facilitatorUrl: cfg.facilitatorUrl };
+  // VettingCo's account area: a wallet that signs in can read its own purchase history (which vendors it has vetted).
+  const history = new Map<string, string[]>();
+  const nonces = new Map<string, { address: string; expires: number }>();
+  const sessions = new Map<string, string>(); // bearer token → wallet address
+  const ledger = cfg.ledgerUrl && cfg.serviceKey ? new LedgerClient(cfg.ledgerUrl, cfg.serviceKey) : undefined;
+  const deps = {
+    facilitatorUrl: cfg.facilitatorUrl,
+    onPaid: (payer: string, resource: string) => history.set(payer, [...(history.get(payer) ?? []), resource]),
+  };
   const premium = { amount: String(PREMIUM_PRICE), payTo: MERCHANT_ACCOUNT, description: 'Vendor deep-dive report (VettingCo premium)' };
 
   // --- Edge gate for the /v1/premium/ tier (V15) ---------------------------------------------------------
@@ -88,6 +104,43 @@ export function createMerchantApp(cfg: MerchantConfig): Express {
       return report;
     },
   );
+
+  // --- Wallet sign-in (SIWx) ----------------------------------------------------------------------------
+  // The SERVER side is done right: the message must name THIS host, carry a nonce this server issued for that address, once, and be
+  // signed by the address's key. The bug (V34) is on the signer's side: a client that signs any message it is handed lets a third party
+  // obtain a perfectly valid login for this site.
+  app.get('/auth/siwx/challenge', (req, res) => {
+    const address = String(req.query.address ?? '');
+    if (!address) throw new HttpError(400, 'address_required');
+    const nonce = randomHex(8);
+    nonces.set(nonce, { address, expires: Date.now() + SIWX_NONCE_TTL_MS });
+    res.json({ message: siwxMessage({ domain: req.get('host')!, address, nonce, issuedAt: new Date().toISOString() }) });
+  });
+
+  app.post('/auth/siwx/login', express.json({ limit: '8kb' }), (req, res, next) => {
+    login(req, res).catch(next);
+  });
+  const login = async (req: express.Request, res: express.Response): Promise<void> => {
+    if (!ledger) throw new HttpError(501, 'siwx_not_configured');
+    const { message, signature, address } = (req.body ?? {}) as Partial<SiwxPayload>;
+    const f = typeof message === 'string' ? parseSiwxMessage(message) : null;
+    if (!f || typeof signature !== 'string' || f.address !== address) throw new HttpError(400, 'invalid_message');
+    if (f.domain !== req.get('host')) throw new HttpError(401, 'domain_mismatch');
+    const n = nonces.get(f.nonce);
+    nonces.delete(f.nonce); // single use
+    if (!n || n.address !== f.address || n.expires < Date.now()) throw new HttpError(401, 'invalid_nonce');
+    const agent = await ledger.getAgent(f.address).catch(() => undefined);
+    if (!agent || !verifyMessage(agent.publicKey, message!, signature)) throw new HttpError(401, 'invalid_signature');
+    const token = 'sess_' + randomHex(16);
+    sessions.set(token, agent.id);
+    res.json({ token, address: agent.id });
+  };
+
+  app.get('/v1/account/history', (req, res) => {
+    const who = sessions.get((req.header('authorization') ?? '').replace(/^Bearer /i, ''));
+    if (!who) throw new HttpError(401, 'sign_in_required');
+    res.json({ address: who, purchases: history.get(who) ?? [] });
+  });
 
   app.use(errorHandler);
   return app;

@@ -1,6 +1,6 @@
 # Demo 3: Pay — the 402 is signed without being checked
 
-**Bugs in the demo:** V15 (the paywall's gate and its router parse the path differently), V7 (the agent signs any 402 it is handed). **Also in this chapter, covered by tests:** V6 (the agent's x402 budget exists only in its prompt), V16 (fail-open), V17 (duplicate settle reported as success), V18 (payment not bound to the resource), V19 (redirect forwards the payment header), V22 (text and structured copies of a payment request differ).
+**Bugs in the demo:** V15 (the paywall's gate and its router parse the path differently), V7 (the agent signs any 402 it is handed). **Also in this chapter, covered by tests:** V6 (the agent's x402 budget exists only in its prompt), V16 (fail-open), V17 (duplicate settle reported as success), V18 (payment not bound to the resource), V19 (redirect forwards the payment header), V22 (text and structured copies of a payment request differ), V33 (a facilitator that accepts an approval as a payment), V34 (the agent signs a wallet-login message meant for another site).
 **Hints:** [hints/03-pay.md](../../hints/03-pay.md) · **Tests:** `test/chapter3.test.ts`, `test/x402.test.ts`, `tooling/tests/test_chapter3.py`, `tooling/tests/test_chapter3_signed.py`
 
 ## How x402 works here
@@ -45,6 +45,17 @@ V7 pins the payee, caps the price and checks network, asset and origin before an
 ## Other bugs in this chapter
 - Run the tests: `npm test -- chapter3` and `python3 -W ignore -m unittest tooling/tests/test_chapter3_signed.py`.
 - V22 live beat: `make d-up-attack`, then `ENRICH_VENDOR=1 VENDOR_MCP_URL=http://vendor-mcp:4300/mcp make d-agent`; compare the agent log ($0.25 to VettingCo) with `make d-status` (the attacker account gains $1.00).
+
+## Variants from the October 2026 x402 SDK advisory (V33, V34)
+Three flaws in the real SDKs ([The Hacker News](https://thehackernews.com/2026/10/critical-x402-sdk-flaw-could-let.html)). DVAP already had the first as V7/V20/V6: a client that signs whatever 402 it is handed, with no default cap, so a hostile API can ask for the wallet's whole balance. The other two are new:
+- **V33, approval accepted as payment.** The facilitator checks that the signed instruction is a token-program call, not which one. A payer with an empty wallet signs an `approve` (it moves nothing), verify passes, settle "succeeds" with no transfer, and the merchant releases the report. Run `npm test -- sdk-flaws`; fix with `DVAP_HARDEN=V33` (`wrong_instruction`).
+- **V34, login relay.** A 402 can ask the agent to also sign a "sign in with your wallet" message. The agent signs it without checking which site it names. Globex's rogue merchant fetches a fresh login message from the real VettingCo, puts it in its own 402, and replays the agent's signature at VettingCo: it is now signed in as the agent and reads its purchase history (`/v1/account/history`).
+  ```bash
+  ROGUE_SIWX_TARGET=http://merchant:4021 make d-up-attack   # rogue relays logins to the real merchant
+  make d-ch3 && curl -s http://127.0.0.1:4666/relayed       # the stolen session and the victim's history
+  make d-reset && make d-harden H=V34 && make d-ch3         # siwx_rejected: message is for merchant:4021, not rogue:4666
+  ```
+  The merchant's own checks (host, one-time nonce, signature) are correct; the bug is on the signer's side.
 
 ## Related public incidents (pattern, not the same attack)
 - Freysa, November 2024: the rule against sending funds lived in a prompt, and a player talked the agent into releasing a prize pool of about $47K. [The Block](https://www.theblock.co/post/328747).

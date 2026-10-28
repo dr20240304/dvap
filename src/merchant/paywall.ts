@@ -16,6 +16,8 @@ export interface PaidRouteConfig {
 
 export interface PaywallDeps {
   facilitatorUrl: string;
+  /** called after a payment settles, with the payer and the resource URL (the merchant's purchase history) */
+  onPaid?: (payer: string, resource: string) => void;
 }
 
 async function facilitator<T>(deps: PaywallDeps, path: 'verify' | 'settle', body: unknown): Promise<T> {
@@ -132,6 +134,7 @@ async function charge<T>(
     return null;
   }
   if (settlement.transaction) consumedReceipts.add(settlement.transaction); // a receipt already redeemed by its own request is spent
+  if (settlement.success && settlement.payer) deps.onPaid?.(settlement.payer, resourceUrl(req));
   return { data, settlement };
 }
 

@@ -34,7 +34,7 @@ export async function startStack(opts: { dir?: string; ephemeral?: boolean; rese
   running.push(ledger);
   const facilitator = await listen('facilitator', createFacilitatorApp({ ledgerUrl: ledger.url, serviceKey: keys.serviceKey }), p('facilitator'));
   running.push(facilitator);
-  const merchant = await listen('merchant-api', createMerchantApp({ facilitatorUrl: facilitator.url }), p('merchant'));
+  const merchant = await listen('merchant-api', createMerchantApp({ facilitatorUrl: facilitator.url, ledgerUrl: ledger.url, serviceKey: keys.serviceKey }), p('merchant'));
   running.push(merchant);
   const mcp = await listen('payments-mcp', createPaymentsMcpApp({ ledgerUrl: ledger.url, serviceKey: keys.serviceKey, dataDir: dir }), p('mcp'));
   running.push(mcp);
