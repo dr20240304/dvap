@@ -87,7 +87,7 @@ Each demo is a full walk along the chain from a different way in, ends with mone
 |---|---|---|---|
 | 1 Prompt | Prompt | V3 (plus V5, V8; V26 variant; V1, V2, V28 optional) | [docs/demos/01-prompt.md](docs/demos/01-prompt.md) |
 | 2 Approve | Approve | V4, V5, V8, V29 | [docs/demos/02-approve.md](docs/demos/02-approve.md) |
-| 3 Pay | Pay | V15, V7 (plus V6, V16 to V19, V22) | [docs/demos/03-pay.md](docs/demos/03-pay.md) |
+| 3 Pay | Pay | V15, V7 (plus V6, V16 to V19, V22, V33, V34) | [docs/demos/03-pay.md](docs/demos/03-pay.md) |
 | 4 Pwn | Pwn | V10 (plus V13, an audit-trail gap with no switch) | [docs/demos/04-pwn.md](docs/demos/04-pwn.md) |
 
 ### Demo 1: Prompt (a hidden memo steers the agent)
@@ -117,6 +117,8 @@ make d-reset && make d-ch3                    # the bypass, then the agent pays 
 make d-status                                 # acct_globex_drop holds $15
 make d-reset && make d-harden H=V15,V7 && make d-ch3      # every path 402, challenge_rejected
 ```
+
+Two more variants come from the October 2026 [x402 SDK advisory](https://thehackernews.com/2026/10/critical-x402-sdk-flaw-could-let.html): a facilitator that accepts a token approval as a payment (V33) and an agent that signs a wallet-login message meant for another site (V34). Commands and fixes are in [docs/demos/03-pay.md](docs/demos/03-pay.md); tests in `test/sdk-flaws.test.ts`.
 
 ### Demo 4: Pwn (a report title opens the vault)
 Command injection in a reporting tool (V10) leaks the service key and the CFO signing key; the stolen key signs a pending payment, and the audit log blames the CFO (V13).
